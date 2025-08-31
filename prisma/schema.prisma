@@ -1,0 +1,318 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// User model with role-based access control
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String
+  role          UserRole  @default(STAFF)
+  phone         String?
+  avatar        String?
+  isActive      Boolean   @default(true)
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  appointments   Appointment[]
+  visits         Visit[]
+  assignedIssues Issue[]    @relation("IssueAssignee")
+  createdIssues  Issue[]    @relation("IssueCreator")
+  issueComments  IssueComment[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+// Visitor model with rural-specific fields
+model Visitor {
+  id          String      @id @default(cuid())
+  name        String
+  phone       String      @unique
+  email       String?
+  aadhaar     String?     @unique
+  voterId     String?     @unique
+  village     String
+  district    String
+  state       String      @default("Maharashtra")
+  address     String?
+  category    VisitorCategory @default(OTHER)
+  age         Int?
+  gender      Gender?
+  occupation  String?
+  education   String?     // Education qualification
+  skills      String?     // JSON array of skills
+  resumeUrl   String?     // URL to stored resume file
+  resumeData  String?     // Base64 encoded resume data
+  photo       String?
+  notes       String?
+  isActive    Boolean     @default(true)
+  visitCount  Int         @default(0)
+  lastVisit   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  appointments Appointment[]
+  visits       Visit[]
+  issues       Issue[]
+  resumes      Resume[]
+
+  @@map("visitors")
+}
+
+// Appointment model with scheduling capabilities
+model Appointment {
+  id            String           @id @default(cuid())
+  title         String
+  description   String?
+  visitorId     String
+  userId        String
+  scheduledDate DateTime
+  startTime     DateTime
+  endTime       DateTime
+  status        AppointmentStatus @default(PENDING)
+  priority      Priority         @default(NORMAL)
+  duration      Int              @default(30) // in minutes
+  location      String?
+  notes         String?
+  reminderSent  Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  // Relations
+  visitor Visitor @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visits  Visit[]
+
+  @@map("appointments")
+}
+
+// Visit model for tracking actual visits
+model Visit {
+  id            String      @id @default(cuid())
+  visitorId     String
+  userId        String
+  appointmentId String?
+  checkInTime   DateTime
+  checkOutTime  DateTime?
+  status        VisitStatus @default(IN_PROGRESS)
+  purpose       String?
+  notes         String?
+  satisfaction  Int?        // 1-5 rating
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  // Relations
+  visitor     Visitor     @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@map("visits")
+}
+
+// Issue model for tracking constituent problems
+model Issue {
+  id            String       @id @default(cuid())
+  title         String
+  description   String
+  category      IssueCategory
+  priority      Priority     @default(NORMAL)
+  status        IssueStatus  @default(OPEN)
+  visitorId     String?
+  village       String?
+  district      String?
+  assignedUserId String?
+  createdById   String
+  dueDate       DateTime?
+  resolvedDate  DateTime?
+  resolution    String?
+  estimatedCost Float?
+  actualCost    Float?
+  department    String?
+  tags          String?      // JSON array of tags
+  photos        String?      // JSON array of photo URLs
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relations
+  visitor    Visitor?  @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  assignedTo User?     @relation("IssueAssignee", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  createdBy  User      @relation("IssueCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  comments   IssueComment[]
+
+  @@map("issues")
+}
+
+// Issue comments for tracking resolution progress
+model IssueComment {
+  id        String   @id @default(cuid())
+  issueId   String
+  userId    String
+  comment   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("issue_comments")
+}
+
+// Notification model
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      NotificationType
+  status    NotificationStatus @default(UNREAD)
+  priority  Priority         @default(NORMAL)
+  metadata  String?          // JSON for additional data
+  createdAt DateTime         @default(now())
+  readAt    DateTime?
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Audit log for tracking system changes
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String
+  entityType  String
+  entityId    String
+  oldValues   String?  // JSON
+  newValues   String?  // JSON
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("audit_logs")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  POLITICIAN
+  STAFF
+}
+
+enum VisitorCategory {
+  FARMER
+  WOMEN
+  SENIOR_CITIZEN
+  STUDENT
+  BUSINESSMAN
+  LABORER
+  TEACHER
+  HEALTH_WORKER
+  GOVERNMENT_EMPLOYEE
+  YOUTH
+  UNEMPLOYED
+  OTHER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum Priority {
+  URGENT
+  HIGH
+  NORMAL
+  LOW
+}
+
+enum VisitStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum IssueCategory {
+  INFRASTRUCTURE
+  WATER
+  ELECTRICITY
+  EDUCATION
+  HEALTH
+  AGRICULTURE
+  EMPLOYMENT
+  HOUSING
+  SOCIAL_WELFARE
+  LEGAL
+  ADMINISTRATIVE
+  OTHER
+}
+
+enum IssueStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  ESCALATED
+}
+
+enum NotificationType {
+  APPOINTMENT_REMINDER
+  ISSUE_ASSIGNED
+  ISSUE_UPDATED
+  VISIT_REMINDER
+  SYSTEM_ALERT
+  REPORT_GENERATED
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  DISMISSED
+}
+
+// Resume model for storing visitor resumes
+model Resume {
+  id          String   @id @default(cuid())
+  visitorId   String
+  fileName    String
+  fileType    String
+  fileSize    Int
+  fileUrl     String?  // URL to stored file
+  fileData    String?  // Base64 encoded file data
+  title       String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  visitor Visitor @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@map("resumes")
+}
