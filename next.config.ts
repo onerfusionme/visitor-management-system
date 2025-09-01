@@ -2,8 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  optimizeFonts: false, // Add this line to fix the deployment error
-
+  
   typescript: {
     ignoreBuildErrors: true,
   },
